@@ -3,6 +3,7 @@ import json
 import time
 import traceback
 import threading
+import sys
 
 server_port = 4918
 communication_port = 4919
@@ -10,7 +11,7 @@ heartbeat_check_interval = 1.0  # s
 heartbeat_timeout = 5.0  # s
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.settimeout(0)  # make recvfrom non-blocking
+sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
 sock.bind(('', server_port))
 
 my_ip = socket.gethostbyname(socket.gethostname())
@@ -26,6 +27,7 @@ def check_timeout():
         if clients[ip]['last_seen'] < time.time() - heartbeat_timeout:
             del clients[ip]
             print("Timeout from client " + ip)
+
 
 def send_discover_response(ip, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -52,8 +54,7 @@ def handle_msg(data):
         # print(clients)
 
 
-try:
-    check_timeout() # start checking for timeouted clients
+def network_task():
     while(running):
         try:
             m = sock.recvfrom(4096)
@@ -70,8 +71,23 @@ try:
         except (OSError) as e:
             # print(e.type, e)
             traceback.print_exc()
-        time.sleep(0.01)
-except KeyboardInterrupt:
-    running = False
-    print('Exiting...')
-    print(clients)
+
+
+def main():
+    global running
+    try:
+        print("Running multiFlut server at " +
+              str(my_ip) + ":" + str(server_port))
+        threading.Thread(target=network_task).start()
+        check_timeout()  # start checking for timeouted clients
+        while(running):
+            time.sleep(1)
+    except (KeyboardInterrupt, SystemExit):
+        running = False
+        print('Exiting...')
+        print(clients)
+        sys.exit()
+
+
+if __name__ == "__main__":
+    main()

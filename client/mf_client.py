@@ -10,10 +10,11 @@ heartbeat_interval = 1.0  # s
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-sock.settimeout(0)  # make recvfrom non-blocking
+sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
 sock.bind(('', communication_port))
 
 server_ip = ''
+my_ip = socket.gethostbyname(socket.gethostname())
 running = True
 last_heartbeat = 0
 
@@ -48,9 +49,7 @@ def handle_msg(data):
         print('New server IP: ' + server_ip)
 
 
-try:
-    send_discovery()
-    send_heartbeat()  # start heartbeat timer
+def network_task():
     while(running):
         try:
             m = sock.recvfrom(4096)
@@ -67,8 +66,23 @@ try:
         except (OSError) as e:
             # print(e.type, e)
             traceback.print_exc()
-        time.sleep(0.01)
-except KeyboardInterrupt:
-    send_disconnect()
-    running = False
-    print('Exiting...')
+
+
+def main():
+    global running
+    try:
+        print("multiFlut client started at " +
+              str(my_ip) + ":" + str(communication_port))
+        threading.Thread(target=network_task).start()
+        send_discovery()
+        send_heartbeat()  # start heartbeat timer
+        while(running):
+            time.sleep(1)
+    except KeyboardInterrupt:
+        send_disconnect()
+        running = False
+        print('Exiting...')
+
+
+if __name__ == "__main__":
+    main()
