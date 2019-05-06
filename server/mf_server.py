@@ -4,17 +4,16 @@ import time
 import traceback
 import threading
 import sys
+import argparse
+import re
 
 server_port = 4918
 communication_port = 4919
 heartbeat_check_interval = 1.0  # s
 heartbeat_timeout = 5.0  # s
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
-sock.bind(('', server_port))
-
-my_ip = socket.gethostbyname(socket.gethostname())
+sock = None
+my_ip = ''
 clients = {}
 running = True
 
@@ -73,19 +72,62 @@ def network_task():
             traceback.print_exc()
 
 
-def main():
-    global running
+def parseArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("host")
+    parser.add_argument("port", type=int)
+    parser.add_argument("imageFile")
+
+    parser.add_argument("-x", "--xoffset", type=int, default=0)
+    parser.add_argument("-y", "--yoffset", type=int, default=0)
+    # parser.add_argument("-t", "--threads", type=int, default=1,
+    #                     help="number of threads for data sending")
+    # parser.add_argument("-u", "--nocompression", action='store_const', const=True,
+    #                     default=False, help="save cache file uncompressed")
+    # parser.add_argument("-r", "--regenerate", action='store_const', const=True,
+    #                     default=False, help="overwrite cached file")
+    # parser.add_argument("-n", "--nocache", action='store_const', const=True,
+    #                     default=False, help="disable writing cache file")
+    # parser.add_argument("-a", "--algorithm", type=int, default=0,
+    #                     help="algorithm selection 0=lineByLine, 1=randomPixel")
+
+    args = parser.parse_args()
+    return args
+
+def get_canvas_size(ip, port): # returns tuple of x and y size
+    tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tmp_sock.settimeout(0.5)
     try:
+        tmp_sock.connect((ip, port))
+        tmp_sock.send(b"SIZE\n")
+        size_str = tmp_sock.recv(4096)
+        result = re.findall("SIZE (\d+) (\d+)", str(size_str))[0]
+        return result
+    except (ConnectionRefusedError, TimeoutError, socket.timeout):
+            print("Connection to Pixelflut at " + str(ip) + ":" + str(port) + " failed or SIZE cmd not supported")
+
+def main():
+    global running, sock, my_ip
+    args = parseArgs()
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
+        sock.bind(('', server_port))
+        my_ip = socket.gethostbyname(socket.gethostname())
+        
         print("Running multiFlut server at " +
               str(my_ip) + ":" + str(server_port))
-        threading.Thread(target=network_task).start()
+
+        print(get_canvas_size(args.host, args.port))
+
+        threading.Thread(target=network_task, daemon=True).start()
         check_timeout()  # start checking for timeouted clients
         while(running):
             time.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         running = False
         print('Exiting...')
-        print(clients)
+        # print(clients)
         sys.exit()
 
 

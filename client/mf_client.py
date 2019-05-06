@@ -4,17 +4,15 @@ import time
 import traceback
 import threading
 
+import image_to_pf
+
 server_port = 4918
 communication_port = 4919
 heartbeat_interval = 1.0  # s
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
-sock.bind(('', communication_port))
-
+sock = None
+my_ip = ''
 server_ip = ''
-my_ip = socket.gethostbyname(socket.gethostname())
 running = True
 last_heartbeat = 0
 
@@ -69,11 +67,17 @@ def network_task():
 
 
 def main():
-    global running
+    global running, sock, my_ip
     try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        # sock.settimeout(0.2)  # only wait for 0.2s so network thread is exitable
+        sock.bind(('', communication_port))
+        my_ip = socket.gethostbyname(socket.gethostname())
+
         print("multiFlut client started at " +
               str(my_ip) + ":" + str(communication_port))
-        threading.Thread(target=network_task).start()
+        threading.Thread(target=network_task, daemon=True).start()
         send_discovery()
         send_heartbeat()  # start heartbeat timer
         while(running):
